@@ -6,6 +6,7 @@ import matplotlib.pyplot as plt
 import io
 from PIL import Image, ImageTk
 import matplotlib
+import sympy as sp
 
 matplotlib.use('TkAgg')
 
@@ -69,20 +70,60 @@ class LaTeXRenderer:
             return None
 
     def graph_sequence_from_latex(self, latex_expr, n_terms=15):
-        """Parse LaTeX and create a graph for sequences, series, or functions"""
+        """Parse LaTeX and create a graph using sympy"""
         try:
-            # Use LaTeX for all text elements
-            plt.rcParams['text.usetex'] = False  # Keep False to avoid requiring LaTeX installation
-            plt.rcParams['mathtext.fontset'] = 'stix'
+            import numpy as np
 
             fig, ax = plt.subplots(figsize=(7, 4), dpi=100)
 
-            n_values = list(range(1, n_terms + 1))
-            y_values = []
+            # Check if this is a Taylor series expansion (contains = and sum)
+            if "=" in latex_expr and "sum" in latex_expr:
+                # Extract the function name from the left side of the equation
+                func_name = latex_expr.split("=")[0].strip()
 
-            # Check what type of expression we have
-            if "sum" in latex_expr or "sum_{" in latex_expr:
+                # Map common function names to sympy expressions
+                x = sp.Symbol('x')
+                if "sin" in func_name:
+                    expr = sp.sin(x)
+                    title = r'$f(x) = \sin(x)$'
+                elif "cos" in func_name:
+                    expr = sp.cos(x)
+                    title = r'$f(x) = \cos(x)$'
+                elif "e^" in func_name or "e^{x}" in func_name:
+                    expr = sp.exp(x)
+                    title = r'$f(x) = e^x$'
+                elif "ln" in func_name:
+                    expr = sp.log(1 + x)
+                    title = r'$f(x) = \ln(1+x)$'
+                elif "arctan" in func_name or "tan^{-1}" in func_name:
+                    expr = sp.atan(x)
+                    title = r'$f(x) = \arctan(x)$'
+                elif "sinh" in func_name:
+                    expr = sp.sinh(x)
+                    title = r'$f(x) = \sinh(x)$'
+                elif "cosh" in func_name:
+                    expr = sp.cosh(x)
+                    title = r'$f(x) = \cosh(x)$'
+                else:
+                    expr = sp.sympify(func_name)
+                    title = rf'$f(x) = {sp.latex(expr)}$'
+
+                # Generate x values and plot the actual function
+                x_vals = np.linspace(-5, 5, 200)
+                y_vals = [float(expr.subs(x, val)) for val in x_vals]
+
+                ax.plot(x_vals, y_vals, 'b-', linewidth=2)
+                ax.set_xlabel(r'$x$', fontsize=12)
+                ax.set_ylabel(r'$f(x)$', fontsize=12)
+                ax.axhline(y=0, color='k', linestyle='-', linewidth=0.5)
+                ax.axvline(x=0, color='k', linestyle='-', linewidth=0.5)
+                ax.grid(True, alpha=0.3)
+                ax.set_title(title, fontsize=10)
+
+            elif "sum" in latex_expr or "sum_{" in latex_expr:
                 # It's a series - calculate partial sums
+                n_values = list(range(1, n_terms + 1))
+                y_values = []
                 for n in n_values:
                     try:
                         if "1/n^2" in latex_expr:
@@ -98,46 +139,34 @@ class LaTeXRenderer:
                         y_values.append(val)
                     except:
                         y_values.append(0)
-                ax.set_ylabel(r'$S_n = \sum_{k=1}^{n} a_k$', fontsize=12)
-                title = rf'Series Partial Sums: ${latex_expr}$'
+                ax.plot(n_values, y_values, 'bo-', linewidth=2, markersize=6)
+                ax.set_xlabel(r'$n$', fontsize=12)
+                ax.set_ylabel(r'$S_n$', fontsize=12)
+                ax.set_title(rf'Series Partial Sums: ${latex_expr}$', fontsize=10)
+                ax.grid(True, alpha=0.3)
+
             else:
                 # It's a sequence - calculate terms
-                expr = latex_expr.replace("a_n = ", "").replace("a_n=", "")
+                n = sp.Symbol('n')
+                expr_str = latex_expr.replace("a_n = ", "").replace("a_n=", "")
+                expr = sp.sympify(expr_str)
 
-                for n in n_values:
+                n_values = list(range(1, n_terms + 1))
+                y_values = []
+                for val in n_values:
                     try:
-                        if "1/n" in expr:
-                            val = 1 / n
-                        elif "n/(n+1)" in expr:
-                            val = n / (n + 1)
-                        elif "2n/(3n+1)" in expr:
-                            val = (2 * n) / (3 * n + 1)
-                        elif "1/2^n" in expr or "1/2^{n}" in expr:
-                            val = 1 / (2 ** n)
-                        elif "2 + 1/n" in expr:
-                            val = 2 + 1 / n
-                        elif "ln" in expr:
-                            val = math.log(n) / n if n > 1 else 0
-                        elif "(1 + 1/n)^n" in expr:
-                            val = (1 + 1 / n) ** n
-                        elif "3^n / n!" in expr:
-                            val = (3 ** n) / math.factorial(n)
-                        elif "n^2/2^n" in expr:
-                            val = (n ** 2) / (2 ** n)
-                        else:
-                            val = 1 / n
-                        y_values.append(val)
+                        y = float(expr.subs(n, val))
+                        y_values.append(y)
                     except:
                         y_values.append(0)
-                ax.set_ylabel(r'$a_n$', fontsize=12)
-                title = rf'Sequence: ${latex_expr}$'
 
-            # Create the plot with LaTeX labels
-            ax.plot(n_values, y_values, 'bo-', linewidth=2, markersize=6)
-            ax.axhline(y=0, color='k', linestyle='-', linewidth=0.5)
-            ax.grid(True, alpha=0.3)
-            ax.set_xlabel(r'$n$', fontsize=12)
-            ax.set_title(title, fontsize=10)
+                ax.plot(n_values, y_values, 'bo-', linewidth=2, markersize=6)
+                ax.set_xlabel(r'$n$', fontsize=12)
+                ax.set_ylabel(r'$a_n$', fontsize=12)
+                ax.set_title(rf'Sequence: ${sp.latex(expr)}$', fontsize=10)
+                ax.grid(True, alpha=0.3)
+
+            # Remove numerical values from axes
             ax.set_xticklabels([])
             ax.set_yticklabels([])
             ax.tick_params(axis='both', which='both', length=0)
@@ -167,7 +196,9 @@ class SequenceGame:
         self.lives = 3
         self.current_question = None
         self.difficulty = "Easy"
-
+        self.current_options = []
+        self.selected_answer = tk.StringVar(value="")
+        self.answer_buttons = []
         self.sequence_database = self.build_sequence_database()
         self.setup_gui()
         self.new_question()
@@ -219,6 +250,47 @@ class SequenceGame:
                  "explanation": "Stirling: ln(n!) ~ n ln n - n"},
             ]
         }
+
+    def generate_multiple_choice(self, correct_limit):
+        """Generate 4 multiple choice options"""
+        options = [str(correct_limit)]
+
+        # Generate plausible wrong answers
+        if correct_limit == "0":
+            options.extend(["1", "oo", "-1"])
+        elif correct_limit == "1":
+            options.extend(["0", "oo", "2"])
+        elif correct_limit == r"\infty":
+            options.extend(["0", "1", "-1"])
+        elif correct_limit == "e":
+            options.extend(["1", "0", "2", "e^2"])
+        elif correct_limit == "2":
+            options.extend(["0", "1", "3", "oo"])
+        elif correct_limit == r"\frac{2}{3}":
+            options.extend(["0", "1", r"\frac{1}{2}", "oo"])
+        else:
+            options.extend(["0", "1", "oo"])
+
+        random.shuffle(options)
+        return options[:4]
+
+    def on_answer_select(self, index):
+        """Handle button click"""
+        for i, btn in enumerate(self.answer_buttons):
+            if i == index:
+                btn.config(bg='#2980b9')
+            else:
+                btn.config(bg='#3498db')
+        self.selected_answer.set(self.current_options[index])
+
+    def update_multiple_choice(self):
+        """Update buttons with current question's options"""
+        correct_limit = self.current_question["limit"]
+        self.current_options = self.generate_multiple_choice(correct_limit)
+        for i, btn in enumerate(self.answer_buttons):
+            btn.config(text=self.current_options[i], bg='#3498db')
+        self.selected_answer.set("")
+
     def setup_gui(self):
         self.create_widgets()
 
@@ -258,20 +330,27 @@ class SequenceGame:
         self.question_label.pack(pady=10)
 
         # Answer
+        # Answer - Multiple Choice
         answer_frame = tk.Frame(self.parent, bg='#2c3e50')
         answer_frame.pack(pady=10)
 
-        self.answer_entry = tk.Entry(answer_frame, font=('Arial', 14), width=30)
-        self.answer_entry.pack(side=tk.LEFT, padx=5)
-        self.answer_entry.bind('<Return>', self.check_answer)
+        self.answer_buttons = []
+        for i in range(4):
+            btn = tk.Button(answer_frame, text="", font=('Arial', 12),
+                            command=lambda x=i: self.on_answer_select(x),
+                            bg='#3498db', fg='white', width=20, height=2)
+            row = i // 2
+            col = i % 2
+            btn.grid(row=row, column=col, padx=10, pady=5)
+            self.answer_buttons.append(btn)
 
         submit_btn = tk.Button(answer_frame, text="Check Answer", command=self.check_answer,
-                               font=('Arial', 12, 'bold'), bg='#3498db', fg='white')
-        submit_btn.pack(side=tk.LEFT, padx=5)
+                               font=('Arial', 12, 'bold'), bg='#27ae60', fg='white')
+        submit_btn.grid(row=2, column=0, columnspan=2, pady=10)
 
         visualize_btn = tk.Button(answer_frame, text="Visualize", command=self.visualize_series,
                                   font=('Arial', 10, 'bold'), bg='#9b59b6', fg='white')
-        visualize_btn.pack(side=tk.LEFT, padx=5)
+        visualize_btn.grid(row=3, column=0, columnspan=2, pady=5)
 
         # Feedback
         self.feedback_label = tk.Label(self.parent, text="", font=('Arial', 12),
@@ -292,30 +371,20 @@ class SequenceGame:
                 self.seq_canvas.delete("all")
                 self.seq_canvas.create_image(350, 50, image=img, anchor='center')
                 self.seq_canvas.image = img
-            self.answer_entry.delete(0, tk.END)
+            self.update_multiple_choice()
             self.feedback_label.config(text="")
             self.next_btn.config(state=tk.DISABLED)
 
     def check_answer(self, event=None):
-        user_answer = self.answer_entry.get().strip().lower()
-        correct = self.current_question["limit"].lower()
+        selected = self.selected_answer.get()
 
-        # Handle special cases
-        is_correct = False
-        if user_answer in ["e", "euler"] and correct == "e":
-            is_correct = True
-        elif user_answer == "1/e" and correct == r"\frac{1}{e}":
-            is_correct = True
-        elif user_answer == correct:
-            is_correct = True
-        else:
-            try:
-                if abs(float(eval(user_answer)) - float(eval(correct))) < 0.001:
-                    is_correct = True
-            except:
-                pass
+        if not selected:
+            self.feedback_label.config(text="Please select an answer!", fg='#f39c12')
+            return
 
-        if is_correct:
+        correct = self.current_question["limit"]
+
+        if selected == correct:
             points = 10 + (self.streak * 2)
             self.score += points
             self.streak += 1
@@ -326,7 +395,7 @@ class SequenceGame:
             self.lives -= 1
             self.streak = 0
             self.feedback_label.config(
-                text=f"Wrong! Limit = {self.current_question['limit']}\n{self.current_question['explanation']}",
+                text=f"Wrong! Limit = {correct}\n{self.current_question['explanation']}",
                 fg='#e74c3c')
             self.lives_label.config(text=f"Lives: {'❤️' * max(0, self.lives)}")
             if self.lives <= 0:
@@ -336,7 +405,7 @@ class SequenceGame:
                 self.next_btn.config(state=tk.NORMAL)
 
         self.score_label.config(text=f"Score: {self.score}")
-        self.streak_label.config(text=f"Streak: {self.streak} 🔥")
+        self.streak_label.config(text=f"Streak: {self.streak}")
 
     def reset_game(self):
         self.score = 0
@@ -412,73 +481,82 @@ class SeriesTestGame:
     def build_series_database(self):
         return {
             "Easy": [
-                {"latex": r"\sum_{n=1}^{\infty} \frac{1}{n^2}", "test": "p-series", "answer": "Converges",
+                {"latex": r"\sum_{n=1}^{\infty} \frac{1}{n^2}",
+                 "tests": ["p-series", "integral test", "comparison test"], "answer": "Converges",
                  "explanation": "p=2>1"},
-                {"latex": r"\sum_{n=1}^{\infty} \frac{1}{n}", "test": "p-series", "answer": "Diverges",
-                 "explanation": "Harmonic series diverges"},
-                {"latex": r"\sum_{n=1}^{\infty} \frac{1}{\sqrt{n}}", "test": "p-series", "answer": "Diverges",
-                 "explanation": "p=1/2<1"},
-                {"latex": r"\sum_{n=0}^{\infty} \left(\frac{1}{2}\right)^n", "test": "Geometric", "answer": "Converges",
-                 "explanation": "|r|=1/2<1"},
-                {"latex": r"\sum_{n=0}^{\infty} 2^n", "test": "Geometric", "answer": "Diverges",
+                {"latex": r"\sum_{n=1}^{\infty} \frac{1}{n}", "tests": ["p-series", "integral test"],
+                 "answer": "Diverges", "explanation": "Harmonic series diverges"},
+                {"latex": r"\sum_{n=1}^{\infty} \frac{1}{\sqrt{n}}", "tests": ["p-series", "integral test"],
+                 "answer": "Diverges", "explanation": "p=1/2<1"},
+                {"latex": r"\sum_{n=0}^{\infty} \left(\frac{1}{2}\right)^n",
+                 "tests": ["geometric", "ratio test", "root test"], "answer": "Converges", "explanation": "|r|=1/2<1"},
+                {"latex": r"\sum_{n=0}^{\infty} 2^n",
+                 "tests": ["geometric", "ratio test", "root test", "nth term test"], "answer": "Diverges",
                  "explanation": "|r|=2>1"},
-                {"latex": r"\sum_{n=1}^{\infty} \frac{1}{n^3}", "test": "p-series", "answer": "Converges",
+                {"latex": r"\sum_{n=1}^{\infty} \frac{1}{n^3}",
+                 "tests": ["p-series", "integral test", "comparison test"], "answer": "Converges",
                  "explanation": "p=3>1"},
-                {"latex": r"\sum_{n=0}^{\infty} \left(\frac{3}{4}\right)^n", "test": "Geometric", "answer": "Converges",
-                 "explanation": "|r|=3/4<1"},
-                {"latex": r"\sum_{n=0}^{\infty} \left(\frac{4}{3}\right)^n", "test": "Geometric", "answer": "Diverges",
+                {"latex": r"\sum_{n=0}^{\infty} \left(\frac{3}{4}\right)^n",
+                 "tests": ["geometric", "ratio test", "root test"], "answer": "Converges", "explanation": "|r|=3/4<1"},
+                {"latex": r"\sum_{n=0}^{\infty} \left(\frac{4}{3}\right)^n",
+                 "tests": ["geometric", "ratio test", "root test", "nth term test"], "answer": "Diverges",
                  "explanation": "|r|=4/3>1"},
-                {"latex": r"\sum_{n=1}^{\infty} \frac{1}{n^{0.5}}", "test": "p-series", "answer": "Diverges",
-                 "explanation": "p=0.5<1"},
-                {"latex": r"\sum_{n=1}^{\infty} \frac{1}{n^{2.5}}", "test": "p-series", "answer": "Converges",
+                {"latex": r"\sum_{n=1}^{\infty} \frac{1}{n^{0.5}}", "tests": ["p-series", "integral test"],
+                 "answer": "Diverges", "explanation": "p=0.5<1"},
+                {"latex": r"\sum_{n=1}^{\infty} \frac{1}{n^{2.5}}",
+                 "tests": ["p-series", "integral test", "comparison test"], "answer": "Converges",
                  "explanation": "p=2.5>1"},
             ],
             "Medium": [
-                {"latex": r"\sum_{n=1}^{\infty} \frac{n}{n^2+1}", "test": "Limit Comparison", "answer": "Diverges",
-                 "explanation": "Compare to 1/n"},
-                {"latex": r"\sum_{n=1}^{\infty} \frac{1}{n^2+1}", "test": "Comparison", "answer": "Converges",
+                {"latex": r"\sum_{n=1}^{\infty} \frac{n}{n^2+1}", "tests": ["limit comparison", "comparison test"],
+                 "answer": "Diverges", "explanation": "Compare to 1/n"},
+                {"latex": r"\sum_{n=1}^{\infty} \frac{1}{n^2+1}",
+                 "tests": ["comparison test", "limit comparison", "integral test"], "answer": "Converges",
                  "explanation": "Compare to 1/n^2"},
-                {"latex": r"\sum_{n=1}^{\infty} \frac{2^n}{3^n+1}", "test": "Geometric", "answer": "Converges",
+                {"latex": r"\sum_{n=1}^{\infty} \frac{2^n}{3^n+1}",
+                 "tests": ["geometric", "comparison test", "limit comparison", "ratio test"], "answer": "Converges",
                  "explanation": "~ (2/3)^n"},
-                {"latex": r"\sum_{n=1}^{\infty} \frac{n^2}{2^n}", "test": "Ratio Test", "answer": "Converges",
-                 "explanation": "Ratio = 1/2 < 1"},
-                {"latex": r"\sum_{n=1}^{\infty} \frac{n!}{2^n}", "test": "Ratio Test", "answer": "Diverges",
-                 "explanation": "Ratio = (n+1)/2 → ∞"},
-                {"latex": r"\sum_{n=1}^{\infty} \frac{(-1)^n}{n}", "test": "Alternating Series", "answer": "Converges",
-                 "explanation": "Alternating harmonic series converges conditionally"},
-                {"latex": r"\int_{1}^{\infty} \frac{1}{x^2} dx", "test": "Integral Test", "answer": "Converges",
+                {"latex": r"\sum_{n=1}^{\infty} \frac{n^2}{2^n}", "tests": ["ratio test", "root test"],
+                 "answer": "Converges", "explanation": "Ratio = 1/2 < 1"},
+                {"latex": r"\sum_{n=1}^{\infty} \frac{n!}{2^n}", "tests": ["ratio test", "nth term test"],
+                 "answer": "Diverges", "explanation": "Ratio = (n+1)/2 → ∞"},
+                {"latex": r"\sum_{n=1}^{\infty} \frac{(-1)^n}{n}", "tests": ["alternating series"],
+                 "answer": "Converges", "explanation": "Alternating harmonic series converges conditionally"},
+                {"latex": r"\int_{1}^{\infty} \frac{1}{x^2} dx", "tests": ["integral test"], "answer": "Converges",
                  "explanation": "∫₁^∞ dx/x² = 1"},
-                {"latex": r"\int_{1}^{\infty} \frac{1}{x} dx", "test": "Integral Test", "answer": "Diverges",
+                {"latex": r"\int_{1}^{\infty} \frac{1}{x} dx", "tests": ["integral test"], "answer": "Diverges",
                  "explanation": "∫₁^∞ dx/x diverges"},
-                {"latex": r"\sum_{n=1}^{\infty} \frac{3^n}{n^3}", "test": "Root Test", "answer": "Diverges",
-                 "explanation": "Limit = 3 > 1"},
-                {"latex": r"\sum_{n=1}^{\infty} \frac{n^3}{e^n}", "test": "Ratio Test", "answer": "Converges",
-                 "explanation": "Ratio = 1/e < 1"},
-                {"latex": r"\sum_{n=1}^{\infty} \frac{(-1)^n}{n^2}", "test": "Alternating Series",
-                 "answer": "Converges", "explanation": "Absolutely convergent"},
-                {"latex": r"\sum_{n=1}^{\infty} \frac{1}{n \ln n}", "test": "Integral Test", "answer": "Diverges",
+                {"latex": r"\sum_{n=1}^{\infty} \frac{3^n}{n^3}", "tests": ["root test", "ratio test", "nth term test"],
+                 "answer": "Diverges", "explanation": "Limit = 3 > 1"},
+                {"latex": r"\sum_{n=1}^{\infty} \frac{n^3}{e^n}", "tests": ["ratio test", "root test"],
+                 "answer": "Converges", "explanation": "Ratio = 1/e < 1"},
+                {"latex": r"\sum_{n=1}^{\infty} \frac{(-1)^n}{n^2}",
+                 "tests": ["alternating series", "p-series", "absolute convergence"], "answer": "Converges",
+                 "explanation": "Absolutely convergent"},
+                {"latex": r"\sum_{n=1}^{\infty} \frac{1}{n \ln n}", "tests": ["integral test"], "answer": "Diverges",
                  "explanation": "∫ dx/(x ln x) diverges"},
             ],
             "Hard": [
-                {"latex": r"\sum_{n=1}^{\infty} \frac{3^n n!}{n^n}", "test": "Ratio Test", "answer": "Diverges",
-                 "explanation": "Ratio = 3/e > 1"},
-                {"latex": r"\sum_{n=1}^{\infty} \left(\frac{n}{n+1}\right)^{n^2}", "test": "Root Test",
+                {"latex": r"\sum_{n=1}^{\infty} \frac{3^n n!}{n^n}", "tests": ["ratio test", "root test"],
+                 "answer": "Diverges", "explanation": "Ratio = 3/e > 1"},
+                {"latex": r"\sum_{n=1}^{\infty} \left(\frac{n}{n+1}\right)^{n^2}", "tests": ["root test"],
                  "answer": "Converges", "explanation": "Limit = 1/e < 1"},
-                {"latex": r"\sum_{n=1}^{\infty} \frac{1}{n \ln n}", "test": "Integral Test", "answer": "Diverges",
+                {"latex": r"\sum_{n=1}^{\infty} \frac{1}{n \ln n}", "tests": ["integral test"], "answer": "Diverges",
                  "explanation": "∫ dx/(x ln x) = ln(ln x) diverges"},
-                {"latex": r"\sum_{n=1}^{\infty} \frac{1}{n (\ln n)^2}", "test": "Integral Test", "answer": "Converges",
-                 "explanation": "∫ dx/(x (ln x)²) = -1/ln x converges"},
-                {"latex": r"\sum_{n=1}^{\infty} \frac{(-1)^n}{\sqrt{n}}", "test": "Alternating Series",
+                {"latex": r"\sum_{n=1}^{\infty} \frac{1}{n (\ln n)^2}", "tests": ["integral test"],
+                 "answer": "Converges", "explanation": "∫ dx/(x (ln x)²) = -1/ln x converges"},
+                {"latex": r"\sum_{n=1}^{\infty} \frac{(-1)^n}{\sqrt{n}}", "tests": ["alternating series"],
                  "answer": "Converges", "explanation": "Alternating series, terms → 0"},
-                {"latex": r"\sum_{n=1}^{\infty} \frac{\sin n}{n^2}", "test": "Comparison", "answer": "Converges",
+                {"latex": r"\sum_{n=1}^{\infty} \frac{\sin n}{n^2}",
+                 "tests": ["comparison test", "absolute convergence"], "answer": "Converges",
                  "explanation": "|sin n| ≤ 1, compare to 1/n²"},
-                {"latex": r"\sum_{n=1}^{\infty} \frac{n!}{n^n}", "test": "Ratio Test", "answer": "Converges",
-                 "explanation": "Ratio = (n+1)^{n} / n^{n} / (n+1) → 1/e < 1"},
-                {"latex": r"\sum_{n=1}^{\infty} \frac{(-1)^n n}{n^2+1}", "test": "Alternating Series",
+                {"latex": r"\sum_{n=1}^{\infty} \frac{n!}{n^n}", "tests": ["ratio test", "root test"],
+                 "answer": "Converges", "explanation": "Ratio = (n+1)^{n} / n^{n} / (n+1) → 1/e < 1"},
+                {"latex": r"\sum_{n=1}^{\infty} \frac{(-1)^n n}{n^2+1}", "tests": ["alternating series"],
                  "answer": "Converges", "explanation": "Terms decrease to 0"},
-                {"latex": r"\sum_{n=1}^{\infty} \frac{1}{n^{1+1/n}}", "test": "Limit Comparison", "answer": "Diverges",
-                 "explanation": "Compare to 1/n"},
-                {"latex": r"\sum_{n=1}^{\infty} \left(1 - \frac{1}{n}\right)^{n^2}", "test": "Root Test",
+                {"latex": r"\sum_{n=1}^{\infty} \frac{1}{n^{1+1/n}}", "tests": ["limit comparison"],
+                 "answer": "Diverges", "explanation": "Compare to 1/n"},
+                {"latex": r"\sum_{n=1}^{\infty} \left(1 - \frac{1}{n}\right)^{n^2}", "tests": ["root test"],
                  "answer": "Converges", "explanation": "Limit = 1/e < 1"},
             ]
         }
@@ -580,32 +658,42 @@ class SeriesTestGame:
     def check_answer(self):
         selected_test = self.test_choice_var.get().lower()
         selected_conv = self.conv_var.get().lower()
-        correct_test = self.current_series["test"].lower()
+        correct_tests = [t.lower() for t in self.current_series["tests"]]
         correct_conv = self.current_series["answer"].lower()
 
-        test_correct = selected_test == correct_test
+        test_correct = selected_test in correct_tests
         conv_correct = selected_conv == correct_conv
+
+        # Build feedback message
+        tests_list = ", ".join(self.current_series["tests"])
 
         if test_correct and conv_correct:
             points = 20 + (self.streak * 3)
             self.score += points
             self.streak += 1
-            self.feedback_label.config(text=f"Perfect! {self.current_series['explanation']}\n+{points} points!",
-                                       fg='#2ecc71')
+            self.feedback_label.config(
+                text=f"Perfect! {self.current_series['explanation']}\nValid tests: {tests_list}\n+{points} points!",
+                fg='#2ecc71')
             self.next_btn.config(state=tk.NORMAL)
         elif test_correct or conv_correct:
             points = 10
             self.score += points
             self.streak = max(0, self.streak - 1)
+
+            if test_correct and not conv_correct:
+                msg = f"Test correct, but the series {correct_conv}s."
+            else:
+                msg = f"Test is valid, but you selected {selected_test}."
+
             self.feedback_label.config(
-                text=f"Partially correct. Test: {correct_test}, Result: {correct_conv}\n+{points} points",
+                text=f"Partially correct. {msg}\nValid tests: {tests_list}\n+{points} points",
                 fg='#f39c12')
             self.next_btn.config(state=tk.NORMAL)
         else:
             self.lives -= 1
             self.streak = 0
             self.feedback_label.config(
-                text=f"Wrong! Test: {correct_test}, Result: {correct_conv}\n{self.current_series['explanation']}",
+                text=f"Wrong! Valid tests: {tests_list}\nResult: {correct_conv}\n{self.current_series['explanation']}",
                 fg='#e74c3c')
             self.lives_label.config(text=f"Lives: {'❤️' * max(0, self.lives)}")
             if self.lives <= 0:
@@ -683,7 +771,7 @@ class PowerSeriesGame:
         self.latex_renderer = LaTeXRenderer()
         self.score = 0
         self.streak = 0
-        self.lives = 3
+        self.lives = 6
         self.current_series = None
 
         self.power_series_db = [
